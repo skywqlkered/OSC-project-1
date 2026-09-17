@@ -67,7 +67,6 @@ vector<string> split_string(const string& str, char delimiter = ' ') {
   }
   return retval;
 }
-
 // wrapper around the C execvp so it can be called with C++ strings (easier to work with)
 // always start with the command itself
 // DO NOT CHANGE THIS FUNCTION UNDER ANY CIRCUMSTANCE
@@ -145,6 +144,57 @@ Expression parse_command_line(string commandLine) {
   return expression;
 }
 
+
+
+// framework for executing "date | tail -c 5" using raw commands
+// two processes are created, and connected to each other
+int pipethatshit(Command cmd1, Command cmd2) {
+  // create communication channel shared between the two processes
+  // ...
+  int fildes[2];
+  
+  if (pipe(fildes) < 0) {
+    return 1;
+  }
+
+  pid_t child1 = fork();
+  if (child1 == 0) {
+    // redirect standard output (STDOUT_FILENO) to the input of the shared communication channel
+    // free non used resources (why?)
+
+    dup2(fildes[1], STDOUT_FILENO);
+
+    close(fildes[0]); close(fildes[1]); 
+    execute_command(cmd1);
+    printf("uhoh");
+    // display nice warning that the executable could not be found
+    abort(); // if the executable is not found, we should abort. (why?)
+  }
+
+
+  
+  pid_t child2 = fork();
+  if (child2 == 0) {
+    // redirect the output of the shared communication channel to the standard input (STDIN_FILENO).
+    // free non used resources (why?)
+    
+    dup2(fildes[0], STDIN_FILENO);
+
+    close(fildes[0]); close(fildes[1]); 
+    execute_command(cmd2);
+    printf("uhoh");
+    abort(); // if the executable is not found, we should abort. (why?)
+  }
+
+  close(fildes[0]); close(fildes[1]); 
+  
+  // free non used resources (why?)
+  // wait on child processes to finish (why both?)
+  waitpid(child1, nullptr, 0);
+  waitpid(child2, nullptr, 0);
+  return 0;
+}
+
 int execute_expression(Expression& expression) {
   // Check for empty expression
   if (expression.commands.size() == 0)
@@ -156,65 +206,41 @@ int execute_expression(Expression& expression) {
   // Loop over all commandos, and connect the output and input of the forked processes
 
   // For now, we just execute the first command in the expression. Disable.
-  execute_command(expression.commands[0]);
+  // execute_command(expression.commands[0]);
+
+  int commandamount = expression.commands.size();
+
+  for (int i = 0; i < commandamount-1; i++){
+    cout << i << endl;
+    pipethatshit(expression.commands[i], expression.commands[i+1]);
+  }
 
   return 0;
 }
 
-// framework for executing "date | tail -c 5" using raw commands
-// two processes are created, and connected to each other
-int step1(bool showPrompt) {
-  // create communication channel shared between the two processes
-  // ...
-  
-  int pipefd[2];
-  
-  if (pipe(pipefd) < 0) {
-    return 1;
-  }
-
-  pid_t child1 = fork();
-  if (child1 == 0) {
-    // redirect standard output (STDOUT_FILENO) to the input of the shared communication channel
-    // free non used resources (why?)
-    pipefd[0] = STDOUT_FILENO;
-    Command cmd = {{string("date")}};
-    execute_command(cmd);
-    printf("uhoh");
-    // display nice warning that the executable could not be found
-    abort(); // if the executable is not found, we should abort. (why?)
-  }
-
-  pid_t child2 = fork();
-  if (child2 == 0) {
-    // redirect the output of the shared communication channel to the standard input (STDIN_FILENO).
-    // free non used resources (why?)
-    pipefd[1] = STDIN_FILENO;
-    Command cmd = {{string("tail"), string("-c"), string("5")}};
-    execute_command(cmd);
-    printf("uhoh");
-    abort(); // if the executable is not found, we should abort. (why?)
-  }
-  cout << "1: " << pipefd[0] << endl;
-  cout << "2: " << STDOUT_FILENO << endl;
-  // free non used resources (why?)
-  // wait on child processes to finish (why both?)
-  waitpid(child1, nullptr, 0);
-  waitpid(child2, nullptr, 0);
-  return 0;
-}
 
 int shell(bool showPrompt) {
-  /* <- remove one '/' in front of the other '/' to switch from the normal code to step1 code
+  //* <- remove one '/' in front of the other '/' to switch from the normal code to step1 code
   while (cin.good()) {
     string commandLine = request_command_line(showPrompt);
     Expression expression = parse_command_line(commandLine);
+
+
     int rc = execute_expression(expression);
     if (rc != 0)
       cerr << strerror(rc) << endl;
   }
   return 0;
   /*/
-  return step1(showPrompt);
+  
+  string mystring1 = "date";
+  string mystring2 = "tail -c 5";
+
+  
+  vector<string> command = split_string(mystring1, ' ');
+  vector<string> args2 = split_string(mystring2, ' ');
+
+
+  return pipethatshit(showPrompt, cmd1, cmd2);
   //*/
 }
