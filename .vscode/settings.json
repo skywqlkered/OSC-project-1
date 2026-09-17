@@ -3,5 +3,6 @@
 	"files.associations": {
 		"iostream": "cpp",
 		"list": "cpp"
-	}
+	},
+	"cmake.sourceDirectory": "/home/troyd/project1"
 }
