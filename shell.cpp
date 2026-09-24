@@ -161,57 +161,58 @@ Expression parse_command_line(string commandLine)
   return expression;
 }
 
-// framework for executing "date | tail -c 5" using raw commands
-// two processes are created, and connected to each other
-int pipethatshit(vector<int*> fildes, Command cmd1, Command cmd2)
+// // framework for executing "date | tail -c 5" using raw commands
+// // two processes are created, and connected to each other
+// int pipethatshit(vector<int*> fildes, Command cmd1, Command cmd2)
+// {
+//   // create communication channel shared between the two processes
+//   // ...
+
+//   pid_t child1 = fork();
+//   if (child1 == 0)
+//   {
+//     // redirect standard output (STDOUT_FILENO) to the input of the shared communication channel
+//     // free non used resources (why?)
+
+//     dup2(fildes[1], STDOUT_FILENO);
+
+//     close(fildes[0]);
+//     close(fildes[1]);
+//     execute_command(cmd1);
+//     printf("uhoh");
+//     // display nice warning that the executable could not be found
+//     abort(); // if the executable is not found, we should abort. (why?)
+//   }
+
+//   pid_t child2 = fork();
+//   if (child2 == 0)
+//   {
+//     // redirect the output of the shared communication channel to the standard input (STDIN_FILENO).
+//     // free non used resources (why?)
+
+//     dup2(fildes[0], STDIN_FILENO);
+
+//     close(fildes[0]);
+//     close(fildes[1]);
+//     execute_command(cmd2);
+//     printf("uhoh");
+//     abort(); // if the executable is not found, we should abort. (why?)
+//   }
+
+//   close(fildes[0]);
+//   close(fildes[1]);
+
+//   // free non used resources (why?)
+//   // wait on child processes to finish (why both?)
+//   waitpid(child1, nullptr, 0);
+//   waitpid(child2, nullptr, 0);
+//   return 0;
+// }
+
+vector<int *> make_pipez(int commandamount)
 {
-  // create communication channel shared between the two processes
-  // ...
+  vector<int *> filedes_arr(commandamount-1);
 
-  pid_t child1 = fork();
-  if (child1 == 0)
-  {
-    // redirect standard output (STDOUT_FILENO) to the input of the shared communication channel
-    // free non used resources (why?)
-
-    dup2(fildes[1], STDOUT_FILENO);
-
-    close(fildes[0]);
-    close(fildes[1]);
-    execute_command(cmd1);
-    printf("uhoh");
-    // display nice warning that the executable could not be found
-    abort(); // if the executable is not found, we should abort. (why?)
-  }
-
-  pid_t child2 = fork();
-  if (child2 == 0)
-  {
-    // redirect the output of the shared communication channel to the standard input (STDIN_FILENO).
-    // free non used resources (why?)
-
-    dup2(fildes[0], STDIN_FILENO);
-
-    close(fildes[0]);
-    close(fildes[1]);
-    execute_command(cmd2);
-    printf("uhoh");
-    abort(); // if the executable is not found, we should abort. (why?)
-  }
-
-  close(fildes[0]);
-  close(fildes[1]);
-
-  // free non used resources (why?)
-  // wait on child processes to finish (why both?)
-  waitpid(child1, nullptr, 0);
-  waitpid(child2, nullptr, 0);
-  return 0;
-}
-
-vector<int*> make_pipez(int commandamount)
-{
-  vector<int*> filedes_arr;
 
   for (int i = 0; i < commandamount - 1; i++)
   {
@@ -221,10 +222,88 @@ vector<int*> make_pipez(int commandamount)
     if (pipe(fildes) < 0)
     {
       vector<int *> empty_vec = {0x00};
+      cout << "something went wrong (why?)" << endl;
       return empty_vec;
     }
   }
+  cout << filedes_arr.size() << endl;
   return filedes_arr;
+}
+
+int forkengo(Expression &expression, vector<int *> filedes_arr)
+{
+  int commandamount = expression.commands.size();
+  pid_t fork_arr[commandamount];
+
+  for (int i = 0; i < commandamount; i++)
+  {
+    if (i == 0)
+    {
+      cout << "i = 0, thus the first" << endl;
+      pid_t child = fork();
+      fork_arr[i] = child;
+      if (child == 0)
+      {
+        dup2(filedes_arr[i][1], STDOUT_FILENO);
+
+        close(filedes_arr[i][1]);
+        close(filedes_arr[i][0]);
+        execute_command(expression.commands[i]);
+        printf("uhoh");
+        // display nice warning that the executable could not be found
+        abort(); // if the executable is not found, we should abort. (why?)
+      }
+    }
+    else if (i < commandamount-1)
+    {
+      cout << "0 < 1 > end, thus the middle" << endl;
+      pid_t child = fork();
+      fork_arr[i] = child;
+      if (child == 0)
+      {
+        dup2(filedes_arr[i - 1][0], STDIN_FILENO);
+        dup2(filedes_arr[i][1], STDOUT_FILENO);
+
+        close(filedes_arr[i][1]);
+        close(filedes_arr[i - 1][0]);
+        execute_command(expression.commands[i]);
+        printf("uhoh");
+        // display nice warning that the executable could not be found
+        abort();
+      }
+    }
+    else
+    {
+      cout << "i = end, thus the last" << endl;
+      pid_t child = fork();
+      fork_arr[i] = child;
+      if (child == 0)
+      {
+        dup2(filedes_arr[i - 1][0], STDIN_FILENO);
+        
+        close(filedes_arr[i - 1][0]);
+        execute_command(expression.commands[i]);
+        printf("uhoh");
+        // display nice warning that the executable could not be found
+        abort();
+      }
+    }
+  }
+
+  for (int i = 0; i < commandamount; i++)
+  {
+    if (i != commandamount - 1)
+    {
+      close(filedes_arr[i][0]);
+      close(filedes_arr[i][1]);
+
+      // free non used resources (why?)
+      // wait on child processes to finish (why both?)
+      // wow these are uselessright, (why?)
+    }
+    waitpid(fork_arr[i], nullptr, 0);
+  }
+  return 0;
 }
 
 int execute_expression(Expression &expression)
@@ -243,17 +322,14 @@ int execute_expression(Expression &expression)
 
   int commandamount = expression.commands.size();
 
-  vector<int*> filedes_vector = make_pipez(commandamount);
+  vector<int *> filedes_vector = make_pipez(commandamount);
 
-  for (int i = 0; i < (sizeof(filedes_vector) / sizeof(filedes_vector[0])); i++)
-  {
-    cout << i << "' memory addrress: " << &filedes_vector[i] << endl;
-  }
+  forkengo(expression, filedes_vector);
 
-  for (int i = 0; i < commandamount - 1; i++)
-  {
-    pipethatshit(filedes_vector[i], expression.commands[i], expression.commands[i + 1]);
-  }
+  // for (int i = 0; i < commandamount - 1; i++)
+  // {
+  //   pipethatshit(filedes_vector[i], expression.commands[i], expression.commands[i + 1]);
+  // }
   return 0;
 }
 
