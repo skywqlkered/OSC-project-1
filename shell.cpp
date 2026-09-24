@@ -74,7 +74,7 @@ vector<string> split_string(const string &str, char delimiter = ' ')
 }
 // wrapper around the C execvp so it can be called with C++ strings (easier to work with)
 // always start with the command itself
-// DO NOT CHANGE THIS FUNCTION UNDER ANY CIRCUMSTANCE
+// DO NOT CHANGE THIS FUNCTION UNDER ANY CIRCUMSTANCE :3
 int execvp(const vector<string> &args)
 {
   // build argument list
@@ -100,9 +100,9 @@ int execute_command(const Command &cmd)
   auto &parts = cmd.parts;
   if (parts.size() == 0)
     return EINVAL;
-
   // execute external commands
   int retval = execvp(parts);
+
   return retval ? errno : 0;
 }
 
@@ -209,28 +209,19 @@ Expression parse_command_line(string commandLine)
 //   return 0;
 // }
 
-vector<int *> make_pipez(int commandamount)
+int make_pipez(int (*fds_arr)[2], int commandamount)
 {
-  vector<int *> filedes_arr(commandamount-1);
-
-
   for (int i = 0; i < commandamount - 1; i++)
   {
-    int fildes[2];
-    filedes_arr[i] = fildes;
-
-    if (pipe(fildes) < 0)
+    if (pipe(fds_arr[i]) < 0)
     {
-      vector<int *> empty_vec = {0x00};
-      cout << "something went wrong (why?)" << endl;
-      return empty_vec;
+      return {};
     }
   }
-  cout << filedes_arr.size() << endl;
-  return filedes_arr;
+  return 0;
 }
 
-int forkengo(Expression &expression, vector<int *> filedes_arr)
+int forkengo(Expression &expression, int (*filedes_arr)[2])
 {
   int commandamount = expression.commands.size();
   pid_t fork_arr[commandamount];
@@ -239,24 +230,28 @@ int forkengo(Expression &expression, vector<int *> filedes_arr)
   {
     if (i == 0)
     {
-      cout << "i = 0, thus the first" << endl;
       pid_t child = fork();
       fork_arr[i] = child;
       if (child == 0)
       {
         dup2(filedes_arr[i][1], STDOUT_FILENO);
 
-        close(filedes_arr[i][1]);
-        close(filedes_arr[i][0]);
+        for (int i = 0; i < commandamount; i++)
+        {
+          if (i != commandamount - 1)
+          {
+            close(filedes_arr[i][0]);
+            close(filedes_arr[i][1]);
+          }
+        }
         execute_command(expression.commands[i]);
         printf("uhoh");
         // display nice warning that the executable could not be found
         abort(); // if the executable is not found, we should abort. (why?)
       }
     }
-    else if (i < commandamount-1)
+    else if (i < commandamount - 1)
     {
-      cout << "0 < 1 > end, thus the middle" << endl;
       pid_t child = fork();
       fork_arr[i] = child;
       if (child == 0)
@@ -264,8 +259,14 @@ int forkengo(Expression &expression, vector<int *> filedes_arr)
         dup2(filedes_arr[i - 1][0], STDIN_FILENO);
         dup2(filedes_arr[i][1], STDOUT_FILENO);
 
-        close(filedes_arr[i][1]);
-        close(filedes_arr[i - 1][0]);
+        for (int i = 0; i < commandamount; i++)
+        {
+          if (i != commandamount - 1)
+          {
+            close(filedes_arr[i][0]);
+            close(filedes_arr[i][1]);
+          }
+        }
         execute_command(expression.commands[i]);
         printf("uhoh");
         // display nice warning that the executable could not be found
@@ -274,14 +275,24 @@ int forkengo(Expression &expression, vector<int *> filedes_arr)
     }
     else
     {
-      cout << "i = end, thus the last" << endl;
+      
       pid_t child = fork();
       fork_arr[i] = child;
       if (child == 0)
       {
         dup2(filedes_arr[i - 1][0], STDIN_FILENO);
-        
-        close(filedes_arr[i - 1][0]);
+
+                for (int i = 0; i < commandamount; i++)
+        {
+          if (i != commandamount - 1)
+          {
+            close(filedes_arr[i][0]);
+            close(filedes_arr[i][1]);
+          }
+        }
+        // close(filedes_arr[i - 1][1]);
+        // close(filedes_arr[i - 1][0]);
+
         execute_command(expression.commands[i]);
         printf("uhoh");
         // display nice warning that the executable could not be found
@@ -322,14 +333,10 @@ int execute_expression(Expression &expression)
 
   int commandamount = expression.commands.size();
 
-  vector<int *> filedes_vector = make_pipez(commandamount);
+  int fds_arr[commandamount - 1][2];
+  make_pipez(fds_arr, commandamount);
 
-  forkengo(expression, filedes_vector);
-
-  // for (int i = 0; i < commandamount - 1; i++)
-  // {
-  //   pipethatshit(filedes_vector[i], expression.commands[i], expression.commands[i + 1]);
-  // }
+  forkengo(expression, fds_arr);
   return 0;
 }
 
