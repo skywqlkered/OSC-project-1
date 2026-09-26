@@ -369,6 +369,11 @@ int execute_expression(Expression &expression)
     return rc_ch;
   }
 
+  if ((!strcmp(expression.commands[0].parts[0].c_str(), (const char *)"exit")))
+  {
+    exit(0);
+  }
+
   // External commands, executed with fork():
   // Loop over all commandos, and connect the output and input of the forked processes
 
