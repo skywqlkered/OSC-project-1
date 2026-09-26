@@ -101,6 +101,7 @@ int execute_command(const Command &cmd)
   if (parts.size() == 0)
     return EINVAL;
   // execute external commands
+
   int retval = execvp(parts);
 
   return retval ? errno : 0;
@@ -275,14 +276,14 @@ int forkengo(Expression &expression, int (*filedes_arr)[2])
     }
     else
     {
-      
+
       pid_t child = fork();
       fork_arr[i] = child;
       if (child == 0)
       {
         dup2(filedes_arr[i - 1][0], STDIN_FILENO);
 
-                for (int i = 0; i < commandamount; i++)
+        for (int i = 0; i < commandamount; i++)
         {
           if (i != commandamount - 1)
           {
@@ -317,6 +318,43 @@ int forkengo(Expression &expression, int (*filedes_arr)[2])
   return 0;
 }
 
+int handle_ch(Expression expression)
+{
+  size_t cmdsize = expression.commands[0].parts.size();
+
+  string fullargument = "";
+
+  char firstchar = expression.commands[0].parts[1].front();
+  char lastchar = expression.commands[0].parts.back().back();
+
+  if ((firstchar == (char)34) && (firstchar == lastchar))
+  {
+    for (int i = 1; i < cmdsize; i++)
+    {
+      if (i != 1)
+      {
+        fullargument.append(" ");
+      }
+      fullargument.append(expression.commands[0].parts[i]);
+    }
+    fullargument.erase(0, 1);
+    fullargument.erase(fullargument.size() - 1, 1);
+
+    size_t idx = fullargument.find("./");
+    if ((idx != -1) && cmdsize > 2)
+    {
+      fullargument.erase(idx, 2);
+    }
+  }
+  else
+  {
+    fullargument = expression.commands[0].parts[1].c_str();
+  }
+
+  chdir(fullargument.c_str());
+  return errno;
+}
+
 int execute_expression(Expression &expression)
 {
   // Check for empty expression
@@ -324,6 +362,12 @@ int execute_expression(Expression &expression)
     return EINVAL;
 
   // Handle intern commands (like 'cd' and 'exit')
+
+  if (expression.commands[0].parts.size() > 1 && (!strcmp(expression.commands[0].parts[0].c_str(), (const char *)"cd")))
+  {
+    int rc_ch = handle_ch(expression);
+    return rc_ch;
+  }
 
   // External commands, executed with fork():
   // Loop over all commandos, and connect the output and input of the forked processes
@@ -349,20 +393,9 @@ int shell(bool showPrompt)
     Expression expression = parse_command_line(commandLine);
 
     int rc = execute_expression(expression);
+
     if (rc != 0)
       cerr << strerror(rc) << endl;
   }
   return 0;
-  /*/
-
-  string mystring1 = "date";
-  string mystring2 = "tail -c 5";
-
-
-  vector<string> command = split_string(mystring1, ' ');
-  vector<string> args2 = split_string(mystring2, ' ');
-
-
-  return pipethatshit(showPrompt, cmd1, cmd2);
-  //*/
 }
