@@ -216,7 +216,7 @@ int make_pipez(int (*fds_arr)[2], int commandamount)
   {
     if (pipe(fds_arr[i]) < 0)
     {
-      return {};
+      return errno;
     }
   }
   return 0;
@@ -238,34 +238,14 @@ int forkengo(Expression &expression, int (*filedes_arr)[2])
         if (!expression.inputFromFile.empty()) // redirects input of first command based on "<" in expression
         {
           int fd_in = open(expression.inputFromFile.c_str(), O_RDONLY);
-          if (fd_in < 0)
-            {
-              return -1;
-            }
-          if (dup2(fd_in, STDIN_FILENO) < 0)
-            {
-              return -1;
-            }
-          if (close(fd_in) < 0)
-            {
-              return -1;
-            }
+          dup2(fd_in, STDIN_FILENO);
+          close(fd_in);
         }
         if (commandamount == 1 && !expression.outputToFile.empty()) // if one command, redirects output based on ">" in expression
         {
           int fd_out = open(expression.outputToFile.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0666);
-          if (fd_out < 0)
-          {
-            return -1;
-          }
-          if (dup2(fd_out, STDOUT_FILENO) < 0)
-          {
-            return -1;
-          }
-          if (close(fd_out) < 0)
-          {
-            return -1;
-          }
+          dup2(fd_out, STDOUT_FILENO);
+          close(fd_out);
         }
         else // normal procedure
         {
@@ -282,9 +262,8 @@ int forkengo(Expression &expression, int (*filedes_arr)[2])
         }
 
         execute_command(expression.commands[i]);
-        printf("uhoh");
-        // display nice warning that the executable could not be found
-        abort(); // if the executable is not found, we should abort. (why?)
+        cerr << strerror(errno) << endl; // display nice warning that the executable could not be found
+        abort(); // if the executable is not found, we should abort
       }
     }
     else if (i < commandamount - 1)
@@ -305,9 +284,8 @@ int forkengo(Expression &expression, int (*filedes_arr)[2])
           }
         }
         execute_command(expression.commands[i]);
-        printf("uhoh");
-        // display nice warning that the executable could not be found
-        abort();
+        cerr << strerror(errno) << endl; // display nice warning that the executable could not be found
+        abort(); // if the executable is not found, we should abort
       }
     }
     else
@@ -320,18 +298,8 @@ int forkengo(Expression &expression, int (*filedes_arr)[2])
         if (!expression.outputToFile.empty()) // if >1 commands, redirects output based on ">" in expression
         {
           int fd_out = open(expression.outputToFile.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0666);
-          if (fd_out < 0)
-          {
-            return -1;
-          }
-          if (dup2(fd_out, STDOUT_FILENO) < 0)
-          {
-            return -1;
-          }
-          if (close(fd_out) < 0)
-          {
-            return -1;
-          }
+          dup2(fd_out, STDOUT_FILENO);
+          close(fd_out);
         }
         dup2(filedes_arr[i - 1][0], STDIN_FILENO);
 
@@ -347,9 +315,8 @@ int forkengo(Expression &expression, int (*filedes_arr)[2])
         // close(filedes_arr[i - 1][0]);
 
         execute_command(expression.commands[i]);
-        printf("uhoh");
-        // display nice warning that the executable could not be found
-        abort();
+        cerr << strerror(errno) << endl; // display nice warning that the executable could not be found
+        abort(); // if the executable is not found, we should abort
       }
     }
   }
@@ -367,7 +334,7 @@ int forkengo(Expression &expression, int (*filedes_arr)[2])
     }
     waitpid(fork_arr[i], nullptr, 0);
   }
-  return 0;
+  return errno;
 }
 
 int handle_ch(Expression expression)
@@ -435,9 +402,14 @@ int execute_expression(Expression &expression)
   int commandamount = expression.commands.size();
 
   int fds_arr[commandamount - 1][2];
-  make_pipez(fds_arr, commandamount);
-
-  forkengo(expression, fds_arr);
+  if (make_pipez(fds_arr, commandamount) < 0) 
+  {
+    return errno;
+  }
+  if (forkengo(expression, fds_arr) < 0) 
+  {
+    return errno;
+  }
   return 0;
 }
 
