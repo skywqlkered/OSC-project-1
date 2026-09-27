@@ -235,6 +235,22 @@ int forkengo(Expression &expression, int (*filedes_arr)[2])
       fork_arr[i] = child;
       if (child == 0)
       {
+        if (!expression.inputFromFile.empty()) // redirects input of first command based on "<" in expression
+        {
+          int fd_in = open(expression.inputFromFile.c_str(), O_RDONLY);
+          if (fd_in < 0)
+            {
+              return -1;
+            }
+          if (dup2(fd_in, STDIN_FILENO) < 0)
+            {
+              return -1;
+            }
+          if (close(fd_in) < 0)
+            {
+              return -1;
+            }
+        }
         if (commandamount == 1 && !expression.outputToFile.empty()) // if one command, redirects output based on ">" in expression
         {
           int fd_out = open(expression.outputToFile.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0666);
