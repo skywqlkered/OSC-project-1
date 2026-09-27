@@ -235,16 +235,36 @@ int forkengo(Expression &expression, int (*filedes_arr)[2])
       fork_arr[i] = child;
       if (child == 0)
       {
-        dup2(filedes_arr[i][1], STDOUT_FILENO);
-
-        for (int i = 0; i < commandamount; i++)
+        if (commandamount == 1 && !expression.outputToFile.empty()) // if one command, redirects output based on ">" in expression
         {
-          if (i != commandamount - 1)
+          int fd_out = open(expression.outputToFile.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0666);
+          if (fd_out < 0)
           {
-            close(filedes_arr[i][0]);
-            close(filedes_arr[i][1]);
+            return -1;
+          }
+          if (dup2(fd_out, STDOUT_FILENO) < 0)
+          {
+            return -1;
+          }
+          if (close(fd_out) < 0)
+          {
+            return -1;
           }
         }
+        else // normal procedure
+        {
+          dup2(filedes_arr[i][1], STDOUT_FILENO);
+
+          for (int i = 0; i < commandamount; i++)
+          {
+            if (i != commandamount - 1)
+            {
+              close(filedes_arr[i][0]);
+              close(filedes_arr[i][1]);
+            }
+          }
+        }
+
         execute_command(expression.commands[i]);
         printf("uhoh");
         // display nice warning that the executable could not be found
@@ -281,6 +301,22 @@ int forkengo(Expression &expression, int (*filedes_arr)[2])
       fork_arr[i] = child;
       if (child == 0)
       {
+        if (!expression.outputToFile.empty()) // if >1 commands, redirects output based on ">" in expression
+        {
+          int fd_out = open(expression.outputToFile.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0666);
+          if (fd_out < 0)
+          {
+            return -1;
+          }
+          if (dup2(fd_out, STDOUT_FILENO) < 0)
+          {
+            return -1;
+          }
+          if (close(fd_out) < 0)
+          {
+            return -1;
+          }
+        }
         dup2(filedes_arr[i - 1][0], STDIN_FILENO);
 
         for (int i = 0; i < commandamount; i++)
