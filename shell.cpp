@@ -5,15 +5,9 @@
   * v22.09.05
 
   Student names:
-  - ...
-  - ...
+  - Troy Dijsselbloem
+  - Julian Dinnissen
 */
-
-/**
- * Hint: in most IDEs (Visual Studio Code, Qt Creator, neovim) you can:
- * - Control-click on a function name to go to the definition
- * - Ctrl-space to auto complete functions and variables
- */
 
 // function/class definitions you are going to use
 #include <iostream>
@@ -162,54 +156,6 @@ Expression parse_command_line(string commandLine)
   return expression;
 }
 
-// // framework for executing "date | tail -c 5" using raw commands
-// // two processes are created, and connected to each other
-// int pipethatshit(vector<int*> fildes, Command cmd1, Command cmd2)
-// {
-//   // create communication channel shared between the two processes
-//   // ...
-
-//   pid_t child1 = fork();
-//   if (child1 == 0)
-//   {
-//     // redirect standard output (STDOUT_FILENO) to the input of the shared communication channel
-//     // free non used resources (why?)
-
-//     dup2(fildes[1], STDOUT_FILENO);
-
-//     close(fildes[0]);
-//     close(fildes[1]);
-//     execute_command(cmd1);
-//     printf("uhoh");
-//     // display nice warning that the executable could not be found
-//     abort(); // if the executable is not found, we should abort. (why?)
-//   }
-
-//   pid_t child2 = fork();
-//   if (child2 == 0)
-//   {
-//     // redirect the output of the shared communication channel to the standard input (STDIN_FILENO).
-//     // free non used resources (why?)
-
-//     dup2(fildes[0], STDIN_FILENO);
-
-//     close(fildes[0]);
-//     close(fildes[1]);
-//     execute_command(cmd2);
-//     printf("uhoh");
-//     abort(); // if the executable is not found, we should abort. (why?)
-//   }
-
-//   close(fildes[0]);
-//   close(fildes[1]);
-
-//   // free non used resources (why?)
-//   // wait on child processes to finish (why both?)
-//   waitpid(child1, nullptr, 0);
-//   waitpid(child2, nullptr, 0);
-//   return 0;
-// }
-
 int make_pipez(int (*fds_arr)[2], int commandamount)
 {
   for (int i = 0; i < commandamount - 1; i++)
@@ -251,13 +197,10 @@ int forkengo(Expression &expression, int (*filedes_arr)[2])
         {
           dup2(filedes_arr[i][1], STDOUT_FILENO);
 
-          for (int i = 0; i < commandamount; i++)
+          for (int i = 0; i < commandamount - 1; i++)
           {
-            if (i != commandamount - 1)
-            {
-              close(filedes_arr[i][0]);
-              close(filedes_arr[i][1]);
-            }
+            close(filedes_arr[i][0]);
+            close(filedes_arr[i][1]);
           }
         }
 
@@ -275,13 +218,10 @@ int forkengo(Expression &expression, int (*filedes_arr)[2])
         dup2(filedes_arr[i - 1][0], STDIN_FILENO);
         dup2(filedes_arr[i][1], STDOUT_FILENO);
 
-        for (int i = 0; i < commandamount; i++)
+        for (int i = 0; i < commandamount - 1; i++)
         {
-          if (i != commandamount - 1)
-          {
-            close(filedes_arr[i][0]);
-            close(filedes_arr[i][1]);
-          }
+          close(filedes_arr[i][0]);
+          close(filedes_arr[i][1]);
         }
         execute_command(expression.commands[i]);
         cerr << strerror(errno) << endl; // display nice warning that the executable could not be found
@@ -290,7 +230,6 @@ int forkengo(Expression &expression, int (*filedes_arr)[2])
     }
     else
     {
-
       pid_t child = fork();
       fork_arr[i] = child;
       if (child == 0)
@@ -303,16 +242,11 @@ int forkengo(Expression &expression, int (*filedes_arr)[2])
         }
         dup2(filedes_arr[i - 1][0], STDIN_FILENO);
 
-        for (int i = 0; i < commandamount; i++)
+        for (int i = 0; i < commandamount - 1; i++)
         {
-          if (i != commandamount - 1)
-          {
-            close(filedes_arr[i][0]);
-            close(filedes_arr[i][1]);
-          }
+          close(filedes_arr[i][0]);
+          close(filedes_arr[i][1]);
         }
-        // close(filedes_arr[i - 1][1]);
-        // close(filedes_arr[i - 1][0]);
 
         execute_command(expression.commands[i]);
         cerr << strerror(errno) << endl; // display nice warning that the executable could not be found
@@ -327,10 +261,6 @@ int forkengo(Expression &expression, int (*filedes_arr)[2])
     {
       close(filedes_arr[i][0]);
       close(filedes_arr[i][1]);
-
-      // free non used resources (why?)
-      // wait on child processes to finish (why both?)
-      // wow these are uselessright, (why?)
     }
     waitpid(fork_arr[i], nullptr, 0);
   }
@@ -380,25 +310,18 @@ int execute_expression(Expression &expression)
   if (expression.commands.size() == 0)
     return EINVAL;
 
-  // Handle intern commands (like 'cd' and 'exit')
-
+  // Internal commands ('cd' and 'exit')
   if (expression.commands[0].parts.size() > 1 && (!strcmp(expression.commands[0].parts[0].c_str(), (const char *)"cd")))
   {
     int rc_ch = handle_ch(expression);
     return rc_ch;
   }
-
   if ((!strcmp(expression.commands[0].parts[0].c_str(), (const char *)"exit")))
   {
     exit(0);
   }
 
-  // External commands, executed with fork():
-  // Loop over all commandos, and connect the output and input of the forked processes
-
-  // For now, we just execute the first command in the expression. Disable.
-  // execute_command(expression.commands[0]);
-
+  // External commands, executed with fork()
   int commandamount = expression.commands.size();
 
   int fds_arr[commandamount - 1][2];
@@ -415,7 +338,6 @@ int execute_expression(Expression &expression)
 
 int shell(bool showPrompt)
 {
-  //* <- remove one '/' in front of the other '/' to switch from the normal code to step1 code
   while (cin.good())
   {
     string commandLine = request_command_line(showPrompt);
