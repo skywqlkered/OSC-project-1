@@ -314,7 +314,7 @@ int handle_ch(Expression expression)
   }
   else
   {
-    fullargument = expression.commands[0].parts[1].c_str();
+    fullargument = expression.commands[0].parts[1];
   }
 
   chdir(fullargument.c_str());
