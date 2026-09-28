@@ -193,8 +193,23 @@ int forkengo(Expression &expression, int (*filedes_arr)[2])
           dup2(fd_out, STDOUT_FILENO);
           close(fd_out);
         }
-        else // normal procedure
+        if (expression.background && expression.inputFromFile.empty())
         {
+          int child_out = open("/dev/null", O_RDONLY);
+          if (child_out != -1)
+          {
+            dup2(child_out, STDIN_FILENO);
+            close(child_out);
+          }
+          else
+          {
+            _exit(1);
+          }
+        }
+
+        if (commandamount > 1)
+        {
+
           dup2(filedes_arr[i][1], STDOUT_FILENO);
 
           for (int i = 0; i < commandamount - 1; i++)
@@ -206,7 +221,7 @@ int forkengo(Expression &expression, int (*filedes_arr)[2])
 
         execute_command(expression.commands[i]);
         cerr << strerror(errno) << endl; // display nice warning that the executable could not be found
-        abort(); // if the executable is not found, we should abort
+        _exit(1);                        // if the executable is not found, we should _exit(1)
       }
     }
     else if (i < commandamount - 1)
@@ -225,10 +240,10 @@ int forkengo(Expression &expression, int (*filedes_arr)[2])
         }
         execute_command(expression.commands[i]);
         cerr << strerror(errno) << endl; // display nice warning that the executable could not be found
-        abort(); // if the executable is not found, we should abort
+        _exit(1);                        // if the executable is not found, we should _exit(1)
       }
     }
-    else
+    else // last command in expression
     {
       pid_t child = fork();
       fork_arr[i] = child;
@@ -240,6 +255,7 @@ int forkengo(Expression &expression, int (*filedes_arr)[2])
           dup2(fd_out, STDOUT_FILENO);
           close(fd_out);
         }
+
         dup2(filedes_arr[i - 1][0], STDIN_FILENO);
 
         for (int i = 0; i < commandamount - 1; i++)
@@ -250,7 +266,7 @@ int forkengo(Expression &expression, int (*filedes_arr)[2])
 
         execute_command(expression.commands[i]);
         cerr << strerror(errno) << endl; // display nice warning that the executable could not be found
-        abort(); // if the executable is not found, we should abort
+        _exit(1);                        // if the executable is not found, we should _exit(1)
       }
     }
   }
@@ -262,7 +278,8 @@ int forkengo(Expression &expression, int (*filedes_arr)[2])
       close(filedes_arr[i][0]);
       close(filedes_arr[i][1]);
     }
-    waitpid(fork_arr[i], nullptr, 0);
+    if (!expression.background)
+      waitpid(fork_arr[i], nullptr, 0);
   }
   return errno;
 }
@@ -310,7 +327,11 @@ int execute_expression(Expression &expression)
   if (expression.commands.size() == 0)
     return EINVAL;
 
-  // Internal commands ('cd' and 'exit')
+  // Check for empty parts
+  if (expression.commands[0].parts.size() == 0)
+    return EINVAL;
+
+  // Internal commands ('cd', 'exit' and use of &)
   if (expression.commands[0].parts.size() > 1 && (!strcmp(expression.commands[0].parts[0].c_str(), (const char *)"cd")))
   {
     int rc_ch = handle_ch(expression);
@@ -324,12 +345,13 @@ int execute_expression(Expression &expression)
   // External commands, executed with fork()
   int commandamount = expression.commands.size();
 
-  int fds_arr[commandamount - 1][2];
-  if (make_pipez(fds_arr, commandamount) < 0) 
+  int fds_arr[commandamount][2]; // keeps the last open for padding, this way 1 command doesnt lead to undefined behavior
+
+  if (make_pipez(fds_arr, commandamount) < 0)
   {
     return errno;
   }
-  if (forkengo(expression, fds_arr) < 0) 
+  if (forkengo(expression, fds_arr) < 0)
   {
     return errno;
   }
@@ -344,6 +366,11 @@ int shell(bool showPrompt)
     Expression expression = parse_command_line(commandLine);
 
     int rc = execute_expression(expression);
+
+    // KILL ALL THE ZOMBIES
+    int rc_pid = waitpid(-1, nullptr, WNOHANG);
+    while (rc_pid != 0 && rc_pid != -1)
+      rc_pid = waitpid(-1, nullptr, WNOHANG);
 
     if (rc != 0)
       cerr << strerror(rc) << endl;
