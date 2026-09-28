@@ -175,7 +175,7 @@ int forkengo(Expression &expression, int (*filedes_arr)[2])
 
   for (int i = 0; i < commandamount; i++)
   {
-    if (i == 0)
+    if (i == 0) // run for the first command of a pipe
     {
       pid_t child = fork();
       fork_arr[i] = child;
@@ -193,7 +193,7 @@ int forkengo(Expression &expression, int (*filedes_arr)[2])
           dup2(fd_out, STDOUT_FILENO);
           close(fd_out);
         }
-        if (expression.background && expression.inputFromFile.empty())
+        if (expression.background && expression.inputFromFile.empty()) // if background command, redirects output to /dev/null
         {
           int child_out = open("/dev/null", O_RDONLY);
           if (child_out != -1)
@@ -203,7 +203,7 @@ int forkengo(Expression &expression, int (*filedes_arr)[2])
           }
           else
           {
-            _exit(1);
+            _exit(1); // savely exit the shell when a child cannot be made.
           }
         }
 
@@ -224,7 +224,7 @@ int forkengo(Expression &expression, int (*filedes_arr)[2])
         _exit(1);                        // if the executable is not found, we should _exit(1)
       }
     }
-    else if (i < commandamount - 1)
+    else if (i < commandamount - 1) // run for all the commands after the first and before the last
     {
       pid_t child = fork();
       fork_arr[i] = child;
@@ -233,7 +233,7 @@ int forkengo(Expression &expression, int (*filedes_arr)[2])
         dup2(filedes_arr[i - 1][0], STDIN_FILENO);
         dup2(filedes_arr[i][1], STDOUT_FILENO);
 
-        for (int i = 0; i < commandamount - 1; i++)
+        for (int i = 0; i < commandamount - 1; i++) // close all filedescriptors even those not used in this fork.
         {
           close(filedes_arr[i][0]);
           close(filedes_arr[i][1]);
@@ -243,7 +243,7 @@ int forkengo(Expression &expression, int (*filedes_arr)[2])
         _exit(1);                        // if the executable is not found, we should _exit(1)
       }
     }
-    else // last command in expression
+    else // run for the last command in expression
     {
       pid_t child = fork();
       fork_arr[i] = child;
@@ -259,12 +259,12 @@ int forkengo(Expression &expression, int (*filedes_arr)[2])
         dup2(filedes_arr[i - 1][0], STDIN_FILENO);
 
         for (int i = 0; i < commandamount - 1; i++)
-        {
+        { 
           close(filedes_arr[i][0]);
           close(filedes_arr[i][1]);
         }
 
-        execute_command(expression.commands[i]);
+        execute_command(expression.commands[i]); 
         cerr << strerror(errno) << endl; // display nice warning that the executable could not be found
         _exit(1);                        // if the executable is not found, we should _exit(1)
       }
@@ -274,17 +274,17 @@ int forkengo(Expression &expression, int (*filedes_arr)[2])
   for (int i = 0; i < commandamount; i++)
   {
     if (i != commandamount - 1)
-    {
+    {// close all the file descriptors in the parent.
       close(filedes_arr[i][0]);
       close(filedes_arr[i][1]);
     }
-    if (!expression.background)
+    if (!expression.background) // await all the childs except when running in the background
       waitpid(fork_arr[i], nullptr, 0);
   }
   return errno;
 }
 
-int handle_ch(Expression expression)
+int handle_ch(Expression expression) // handles the cd command & chdir systemcall 
 {
   size_t cmdsize = expression.commands[0].parts.size();
 
@@ -293,7 +293,7 @@ int handle_ch(Expression expression)
   char firstchar = expression.commands[0].parts[1].front();
   char lastchar = expression.commands[0].parts.back().back();
 
-  if ((firstchar == (char)34) && (firstchar == lastchar))
+  if ((firstchar == (char)34) && (firstchar == lastchar)) // char 34 = " which is here to remove unwanted chars in the path.
   {
     for (int i = 1; i < cmdsize; i++)
     {
@@ -303,10 +303,10 @@ int handle_ch(Expression expression)
       }
       fullargument.append(expression.commands[0].parts[i]);
     }
-    fullargument.erase(0, 1);
+    fullargument.erase(0, 1); // erase the first and last "
     fullargument.erase(fullargument.size() - 1, 1);
 
-    size_t idx = fullargument.find("./");
+    size_t idx = fullargument.find("./"); // find and remove the ./ character in front of a path
     if ((idx != -1) && cmdsize > 2)
     {
       fullargument.erase(idx, 2);
@@ -345,12 +345,14 @@ int execute_expression(Expression &expression)
   // External commands, executed with fork()
   int commandamount = expression.commands.size();
 
-  int fds_arr[commandamount][2]; // keeps the last open for padding, this way 1 command doesnt lead to undefined behavior
+  int fds_arr[commandamount][2]; // keeps the last open for padding, this way commandamount 1 doesnt lead to undefined behavior
 
+  // create all the require pipes based on the amount of commands
   if (make_pipez(fds_arr, commandamount) < 0)
   {
     return errno;
   }
+  // fork all the necessary child processes
   if (forkengo(expression, fds_arr) < 0)
   {
     return errno;
@@ -371,6 +373,7 @@ int shell(bool showPrompt)
     int rc_pid = waitpid(-1, nullptr, WNOHANG);
     while (rc_pid != 0 && rc_pid != -1)
       rc_pid = waitpid(-1, nullptr, WNOHANG);
+    // They're dead now
 
     if (rc != 0)
       cerr << strerror(rc) << endl;
